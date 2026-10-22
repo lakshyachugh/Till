@@ -92,6 +92,12 @@ input[type=checkbox]{width:auto}
 .qi b{font-weight:600;line-height:1.25}
 .qi span{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .search{margin-bottom:12px}
+.qi span s{color:var(--muted);font-size:12px;margin-left:4px}
+.qi.offer span{color:var(--ok);font-weight:600}
+.qi.gift{border-style:dashed}
+.mrpnote{font-size:12px;color:var(--muted);margin-top:4px}
+.check.comp{margin-top:8px;font-size:15px}
+.check.comp input{width:20px;height:20px}
 
 .cart{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 .cart th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;font-weight:600;padding:6px 4px;border-bottom:1px solid var(--line)}
@@ -218,6 +224,8 @@ input[type=checkbox]{width:auto}
       <h2>Add items</h2>
       <input class="search" id="itemSearch" type="search" placeholder="Search items" autocomplete="off">
       <div id="quick"></div>
+      <div class="cat">Packaging</div>
+      <div class="quick"><button class="qi gift" id="giftBtn"><b>Gift Box</b><span id="giftPriceTag"></span></button></div>
       <div class="row" style="margin-top:14px;align-items:flex-end">
         <label class="f" style="flex:3 1 160px">Other item<input id="adName" placeholder="Item name"></label>
         <label class="f" style="flex:1 1 100px">Price<input id="adRate" type="number" min="0" step="1" inputmode="decimal" placeholder="0"></label>
@@ -235,6 +243,7 @@ input[type=checkbox]{width:auto}
         <label class="f">Discount<input id="disc" type="number" min="0" step="1" inputmode="decimal" value="0"></label>
         <label class="f">Discount type<select id="discType"><option value="amt">₹ Amount</option><option value="pct">% Percent</option></select></label>
       </div>
+      <p class="note" id="discNote"></p>
       <div style="margin-top:12px"><div class="f" style="font-size:13px;color:var(--muted);margin-bottom:4px">Paid by</div>
         <div class="seg" id="paySeg"><button data-v="Cash" aria-pressed="false">Cash</button><button data-v="UPI" aria-pressed="true">UPI</button><button data-v="Card" aria-pressed="false">Card</button></div></div>
       <div class="totals" id="totals"></div>
@@ -265,6 +274,7 @@ input[type=checkbox]{width:auto}
           <label class="f">Category<input id="itCat" list="catList" placeholder="Earrings"></label>
           <label class="f">Price<input id="itRate" type="number" min="0" step="1" inputmode="decimal"></label>
         </div>
+        <label class="f">MRP before offer (leave blank if not on offer)<input id="itMrp" type="number" min="0" step="1" inputmode="decimal"></label>
         <datalist id="catList"></datalist>
         <div class="actions" style="margin-top:4px">
           <button class="btn pri" id="itSave">Save item</button>
@@ -347,6 +357,14 @@ input[type=checkbox]{width:auto}
         </div>
       </div>
       <div class="panel">
+        <h2>Gift box</h2>
+        <div class="row">
+          <label class="f">Price (₹)<input id="sGiftPrice" type="number" min="0" step="1" inputmode="numeric"></label>
+          <label class="f">Free on jewellery of (₹)<input id="sGiftFree" type="number" min="0" step="1" inputmode="numeric"></label>
+        </div>
+        <p class="note">A gift box is ticked Complimentary automatically when the jewellery total reaches this amount. Set 0 to always tick it by hand.</p>
+      </div>
+      <div class="panel">
         <h2>UPI payment QR</h2>
         <label class="f">UPI ID<input id="sUpi" placeholder="suramyah@okaxis"></label>
         <label class="check" style="margin-top:8px"><input type="checkbox" id="sQr"> Print QR on tax invoices paid by UPI</label>
@@ -380,25 +398,29 @@ const KEY = "suramyah.till.v1";
 const STATES = [["01","Jammu and Kashmir"],["02","Himachal Pradesh"],["03","Punjab"],["04","Chandigarh"],["05","Uttarakhand"],["06","Haryana"],["07","Delhi"],["08","Rajasthan"],["09","Uttar Pradesh"],["10","Bihar"],["11","Sikkim"],["12","Arunachal Pradesh"],["13","Nagaland"],["14","Manipur"],["15","Mizoram"],["16","Tripura"],["17","Meghalaya"],["18","Assam"],["19","West Bengal"],["20","Jharkhand"],["21","Odisha"],["22","Chhattisgarh"],["23","Madhya Pradesh"],["24","Gujarat"],["26","Dadra and Nagar Haveli and Daman and Diu"],["27","Maharashtra"],["29","Karnataka"],["30","Goa"],["31","Lakshadweep"],["32","Kerala"],["33","Tamil Nadu"],["34","Puducherry"],["35","Andaman and Nicobar Islands"],["36","Telangana"],["37","Andhra Pradesh"],["38","Ladakh"]];
 const stateName = c => (STATES.find(s=>s[0]===c)||[c,"State "+c])[1];
 
-const I = (cat,name,rs) => ({id:"i"+Math.random().toString(36).slice(2,9),cat,name,rate:rs*100});
+const I = (cat,name,rs,mrp) => Object.assign({id:"i"+Math.random().toString(36).slice(2,9),cat,name,rate:rs*100}, mrp?{mrp:mrp*100}:{});
+const CATALOG = 2;
 const defaults = {
+  catalog:CATALOG,
   settings:{
     shop:"Suramyah", addr:"16/101 East End Apartments\nMayur Vihar Phase 1 Ext\nDelhi 110096", phone:"9773839892",
     gst:"07AMPPL1575N2ZC", hsn:"71131190", tax:3, footer:"Thank you for shopping with Suramyah!", sign:true,
     prefix:"SUR/EX/{FY}/", pad:3, next:1, fy:"",
     hook:"https://hook.us2.make.com/vgog0hazdmnfahn62ixunscvqf2cl92w",
+    giftPrice:200, giftFree:5000,
     upi:"", qr:false, width:32, feed:3, chunk:100, cut:true, bigTotal:true
   },
   items:[
-    I("Earrings","Round Earrings",4590), I("Earrings","Oval Earrings",4990), I("Earrings","Mois Earrings",4990),
-    I("Pendants","Marquise Pendant",2890), I("Pendants","Pear Pendant",3590), I("Pendants","Octagon Pendant",4490),
-    I("Pendants","Mois Pear Pendant",4590), I("Pendants","Mois Octagon Pendant",5990), I("Pendants","SwissBT Octagon Pendant",5990),
-    I("Chains","Mercuria Chain",2000), I("Chains","Argentum Chain",2500),
-    I("Rings","Unity Ring",4790), I("Rings","Felicity Ring",5490), I("Rings","Enchanted Ring",4990),
-    I("Rings","Mois Unity Ring",5490), I("Rings","Mois Enchanted Ring",5990),
+    I("Earrings","Round Earrings",3990,4590), I("Earrings","Oval Earrings",4990), I("Earrings","Loop Earrings",2490), I("Earrings","Mois Earrings",5490),
+    I("Necklaces","Unity 925 Necklace",4590), I("Necklaces","Unity Gold Necklace",5590), I("Necklaces","Knot Bar Necklace",6990),
+    I("Pendants","Marquise Pendant",2890), I("Pendants","Pear Pendant",3590), I("Pendants","Octagon Pendant",3590,4490),
+    I("Pendants","Mois Pear Pendant",4590), I("Pendants","Mois Octagon Pendant",5990),
+    I("Chains","Mercuria Chain",2000),
+    I("Rings","Unity Ring",3990,4790), I("Rings","Enchanted Ring",4990), I("Rings","Felicity Ring",5490), I("Rings","Smiley Ring",5590),
+    I("Rings","Bar Ring",2490), I("Rings","Hammered Ring",4490), I("Rings","Mois Unity Ring",5490), I("Rings","Mois Enchanted Ring",5990),
     I("Studs","Studs",3990), I("Studs","Heart Studs",3990), I("Studs","Studs with Threader",4990),
-    I("Studs","Threader (1 pc)",700), I("Studs","Threader (pair)",1200),
-    I("Studs","Mois Round Studs",5990), I("Studs","Mois Heart Studs",5990)
+    I("Studs","Threader (1 pc)",700), I("Studs","Threader (pair)",1400),
+    I("Studs","Mois Round Studs",4990), I("Studs","Mois Heart Studs",4990)
   ],
   history:[], details:{}, outbox:[]
 };
@@ -407,6 +429,12 @@ try { db = JSON.parse(localStorage.getItem(KEY)) || null; } catch(e){ db = null;
 if(!db) db = JSON.parse(JSON.stringify(defaults));
 db.settings = Object.assign({}, defaults.settings, db.settings);
 db.details = db.details || {}; db.outbox = db.outbox || []; db.history = db.history || [];
+let catalogReset = false;
+if(db.catalog !== CATALOG){
+  // New price list: replace items, wipe sales history and unsent sync, restart the exhibition series
+  db.items = JSON.parse(JSON.stringify(defaults.items)); db.history = []; db.outbox = [];
+  db.settings.next = 1; db.settings.fy = ""; db.catalog = CATALOG; catalogReset = true;
+}
 const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){} };
 
 /* sale state */
@@ -425,25 +453,45 @@ function invNo(n, d=new Date()){ const s=db.settings; return s.prefix.replace("{
 function stamp(d){ return {date:`${pad2(d.getDate())}-${pad2(d.getMonth()+1)}-${d.getFullYear()}`, time:`${pad2(d.getHours())}:${pad2(d.getMinutes())}`}; }
 const homeCode = () => (db.settings.gst||"07").slice(0,2);
 
-/* ---------- money: per-line allocation so line values add up to bill values ---------- */
+/* ---------- money: per-line allocation so line values add up to bill values ----------
+   Offer items (mrp > rate) and the gift box never take a bill discount. */
+const isOffer = l => !l.gift && l.mrp > l.rate;
+const eligible = l => !l.gift && !isOffer(l);
+const lineAmt = l => l.gift && l.comp ? 0 : Math.round(l.qty*l.rate);
+const lineMrp = l => l.gift ? l.rate : (isOffer(l) ? l.mrp : l.rate);
+const lineOffer = l => l.gift ? (l.comp ? Math.round(l.qty*l.rate) : 0) : (isOffer(l) ? Math.round(l.qty*(l.mrp-l.rate)) : 0);
+function billDisc(lines, discVal, discType){
+  const el = lines.filter(eligible).reduce((a,l)=>a+lineAmt(l),0);
+  return discType==="pct" ? Math.round(el*Math.min(Math.max(discVal,0),100)/100) : Math.min(Math.max(toP(discVal),0), el);
+}
 function calc(lines, discVal, discType, inState){
   const rate = +db.settings.tax || 0;
-  const amts = lines.map(l=>Math.round(l.qty*l.rate));
+  const amts = lines.map(lineAmt);
   const sub = amts.reduce((a,b)=>a+b,0);
-  const disc = discType==="pct" ? Math.round(sub*Math.min(discVal,100)/100) : Math.min(toP(discVal), sub);
+  const elSub = lines.reduce((a,l,i)=>a+(eligible(l)?amts[i]:0),0);
+  const disc = billDisc(lines, discVal, discType);
   const net = sub - disc;
   const roundOff = Math.round(net/100)*100 - net;
+  let lastEl = -1; lines.forEach((l,i)=>{ if(eligible(l)) lastEl=i; });
+  const roIdx = lastEl>=0 ? lastEl : lines.length-1;
   let left = disc;
   const out = lines.map((l,i)=>{
-    const last = i===lines.length-1;
-    const ld = last ? left : (sub ? Math.round(disc*amts[i]/sub) : 0); left -= ld;
-    const lnet = amts[i] - ld + (last?roundOff:0);
+    let ld = 0;
+    if(eligible(l)){ ld = i===lastEl ? left : (elSub ? Math.round(disc*amts[i]/elSub) : 0); left -= ld; }
+    const lnet = amts[i] - ld + (i===roIdx?roundOff:0);
     const taxable = Math.round(lnet*100/(100+rate)); const tax = lnet - taxable;
     const cgst = inState ? Math.floor(tax/2) : 0, sgst = inState ? tax-cgst : 0, igst = inState ? 0 : tax;
-    return {amount:amts[i], disc:ld, net:lnet, taxable, cgst, sgst, igst};
+    return {amount:amts[i], mrp:lineMrp(l), offer:lineOffer(l), disc:ld, net:lnet, taxable, cgst, sgst, igst};
   });
   const sum = k => out.reduce((a,o)=>a+o[k],0);
-  return {lines:out, t:{sub, disc, roundOff, total:net+roundOff, taxable:sum("taxable"), cgst:sum("cgst"), sgst:sum("sgst"), igst:sum("igst")}};
+  const offer = sum("offer");
+  return {lines:out, t:{sub, offer, disc, saved:offer+disc, roundOff, total:net+roundOff, taxable:sum("taxable"), cgst:sum("cgst"), sgst:sum("sgst"), igst:sum("igst")}};
+}
+/* complimentary gift box: auto-ticked once the jewellery total reaches the cut-off, unless changed by hand */
+function applyGiftRule(){
+  const s=db.settings, cut=toP(s.giftFree);
+  const jewel = cart.filter(l=>!l.gift).reduce((a,l)=>a+lineAmt(l),0) - billDisc(cart, parseFloat($("#disc").value)||0, $("#discType").value);
+  cart.forEach(l=>{ if(l.gift && !l.compManual) l.comp = cut>0 && jewel>=cut; });
 }
 
 /* ---------- paper layouts ---------- */
@@ -465,14 +513,17 @@ function paper(){
   const push=(text,o={})=>L.push(Object.assign({text:asciiSafe(text),align:"l"},o));
   return {L,push};
 }
-function itemBlock(push, W, bill, withHeader){
+function itemBlock(push, W, bill, withHeader, showMrp){
   const cq=4, ca=11, cn=W-cq-ca;
   if(withHeader){ push(padR("Item",cn)+padL("Qty",cq)+padL("Amount",ca),{bold:true}); push("-".repeat(W)); }
   bill.lines.forEach(l=>{
     const nm = wrap(asciiSafe(l.name), cn-1);
-    push(padR(nm[0],cn)+padL(fmtQty(l.qty),cq)+padL(fmtN(Math.round(l.qty*l.rate)),ca));
+    const amt = l.gift && l.comp ? "FREE" : fmtN(Math.round(l.qty*l.rate));
+    push(padR(nm[0],cn)+padL(fmtQty(l.qty),cq)+padL(amt,ca));
     nm.slice(1).forEach(x=>push(" "+x));
-    if(l.qty!==1) push("  @ "+fmtN(l.rate)+" each");
+    if(l.gift && l.comp) push("  Complimentary");
+    else if(l.qty!==1) push("  @ "+fmtN(l.rate)+" each");
+    if(showMrp && isOffer(l)) push(`  MRP ${inr(l.mrp,0)}  (${Math.round((l.mrp-l.rate)*100/l.mrp)}% off)`);
     if(l.detail) wrap(asciiSafe(l.detail), W-2).forEach(x=>push("  "+x));
   });
 }
@@ -488,8 +539,9 @@ function buildRecord(b, s){
   if(b.cust.phone) push("Phone: "+b.cust.phone);
   if(!b.supply.in) push("Supply: "+stateName(b.supply.code));
   rule();
-  itemBlock(push,W,b,false);
+  itemBlock(push,W,b,false,false);
   rule();
+  if(b.t.offer) push(lr("Saved on offers/gift",fmtN(b.t.offer),W));
   if(b.t.disc) push(lr("Discount","-"+fmtN(b.t.disc),W));
   if(b.t.roundOff) push(lr("Round off",(b.t.roundOff>0?"+":"")+fmtN(b.t.roundOff),W));
   push(lr("TOTAL","Rs. "+fmtN(b.t.total),W),{bold:true});
@@ -511,7 +563,7 @@ function buildInvoice(b, s){
   if(b.cust.phone) push("Phone: "+b.cust.phone);
   wrap("Place of supply: "+supplyText(b),W).forEach(x=>push(x));
   rule();
-  itemBlock(push,W,b,true);
+  itemBlock(push,W,b,true,true);
   rule();
   if(s.hsn) push("HSN: "+s.hsn+"   GST "+s.tax+"%");
   push(lr("Total (incl. GST)",fmtN(b.t.sub),W));
@@ -524,6 +576,7 @@ function buildInvoice(b, s){
   if(s.bigTotal){ push("TOTAL (incl. GST)",{align:"c",bold:true}); push("Rs."+fmtN(b.t.total),{align:"c",bold:true,big:true}); }
   else push(lr("TOTAL","Rs. "+fmtN(b.t.total),W),{bold:true});
   rule("=");
+  if(b.t.saved) push("You saved Rs. "+fmtN(b.t.saved),{align:"c",bold:true});
   push(lr("Paid by",b.pay,W));
   push("Prices are inclusive of GST",{align:"c"});
   if(s.qr && s.upi && b.pay==="UPI"){
@@ -614,12 +667,13 @@ function payload(b, event){
     event, invoice_no:b.no, date:b.date, time:b.time, timestamp:new Date(b.ts).toISOString(),
     customer_name:b.cust.name||"", customer_phone:b.cust.phone||"",
     place_of_supply:supply, supply_type:b.supply.in?"Intra-state":"Inter-state", payment_mode:b.pay,
-    subtotal:rupees(b.t.sub), discount:rupees(b.t.disc), round_off:rupees(b.t.roundOff), bill_total:rupees(b.t.total),
+    subtotal:rupees(b.t.sub), offer_discount:rupees(b.t.offer||0), discount:rupees(b.t.disc), total_saved:rupees(b.t.saved||0), round_off:rupees(b.t.roundOff), bill_total:rupees(b.t.total),
     taxable_value:rupees(b.t.taxable), cgst:rupees(b.t.cgst), sgst:rupees(b.t.sgst), igst:rupees(b.t.igst),
     sent_at:new Date().toISOString(),
     items:b.lines.map((l,i)=>({
       line_id:b.no+"-"+(i+1), line_no:i+1, item:l.name, category:l.cat||"", detail:l.detail||"",
-      qty:l.qty, rate:rupees(l.rate), line_amount:rupees(b.alloc[i].amount), line_discount:rupees(b.alloc[i].disc),
+      qty:l.qty, mrp:rupees(b.alloc[i].mrp ?? l.rate), offer_discount:rupees(b.alloc[i].offer||0),
+      rate:rupees(l.gift&&l.comp?0:l.rate), complimentary:!!(l.gift&&l.comp), line_amount:rupees(b.alloc[i].amount), line_discount:rupees(b.alloc[i].disc),
       line_net:rupees(b.alloc[i].net), taxable_value:rupees(b.alloc[i].taxable),
       cgst:rupees(b.alloc[i].cgst), sgst:rupees(b.alloc[i].sgst), igst:rupees(b.alloc[i].igst)
     }))
@@ -675,7 +729,8 @@ function currentBill(){
   const c=calc(cart, parseFloat($("#disc").value)||0, $("#discType").value, supplyIn);
   return {no:invNo(+db.settings.next,d), date:st.date, time:st.time, ts:d.getTime(),
     cust:{name:$("#cName").value.trim(), phone:$("#cPhone").value.trim()}, supply, pay,
-    lines:cart.map(l=>({name:l.name,cat:l.cat||"",qty:l.qty,rate:l.rate,detail:(l.detail||"").trim()})),
+    lines:cart.map(l=>{ const o={name:l.name,cat:l.cat||"",qty:l.qty,rate:l.rate,detail:(l.detail||"").trim()};
+      if(l.mrp) o.mrp=l.mrp; if(l.gift){ o.gift=true; o.comp=!!l.comp; } return o; }),
     alloc:c.lines, t:c.t, synced:false, cancelled:false};
 }
 function renderQuick(){
@@ -689,7 +744,8 @@ function renderQuick(){
     list.filter(i=>(i.cat||"Other")===c).forEach(it=>{
       const b=document.createElement("button"); b.className="qi"; b.innerHTML="<b></b><span></span>";
       b.querySelector("b").textContent=it.name; b.querySelector("span").textContent=fmtUI(it.rate);
-      b.onclick=()=>{ cart.push({name:it.name,cat:it.cat,qty:1,rate:it.rate,detail:""}); refresh(); toast(it.name+" added"); };
+      if(it.mrp>it.rate){ const sEl=document.createElement("s"); sEl.textContent=" "+fmtUI(it.mrp); b.querySelector("span").appendChild(sEl); b.classList.add("offer"); }
+      b.onclick=()=>{ const l={name:it.name,cat:it.cat,qty:1,rate:it.rate,detail:""}; if(it.mrp>it.rate) l.mrp=it.mrp; cart.push(l); refresh(); toast(it.name+" added"); };
       g.appendChild(b);
     });
   });
@@ -702,13 +758,25 @@ function renderCart(){
       <td><span class="qty"><button aria-label="Less">−</button><input type="number" step="1" min="0" inputmode="numeric"><button aria-label="More">+</button></span></td>
       <td class="n"><input class="price" type="number" step="1" min="0" inputmode="decimal"></td><td class="n amt"></td><td><button class="x" aria-label="Remove">×</button></td>`;
     tr.querySelector(".nm").textContent=l.name;
-    const det=tr.querySelector(".det"), dl=tr.querySelector("datalist"); dl.id="dl"+i; det.setAttribute("list",dl.id); det.id="det"+i;
+    if(isOffer(l)){ const m=document.createElement("div"); m.className="mrpnote"; m.textContent=`MRP ${fmtUI(l.mrp)} · ${Math.round((l.mrp-l.rate)*100/l.mrp)}% off · no extra discount`; tr.children[0].insertBefore(m,tr.querySelector(".det")); }
+    if(l.gift){
+      tr.querySelector(".det").remove(); tr.querySelector("datalist").remove();
+      const lab=document.createElement("label"); lab.className="check comp";
+      lab.innerHTML='<input type="checkbox"> Complimentary';
+      const cb=lab.querySelector("input"); cb.id="comp"+i; cb.checked=!!l.comp;
+      cb.onchange=()=>{ l.comp=cb.checked; l.compManual=true; refresh(); };
+      const hint=document.createElement("div"); hint.className="mrpnote";
+      hint.textContent = l.compManual ? "Set by hand" : (toP(db.settings.giftFree)>0 ? `Free automatically on jewellery of ${fmtUI(toP(db.settings.giftFree))} or more` : "");
+      tr.children[0].append(lab,hint);
+    }
+    const det=tr.querySelector(".det")||document.createElement("input"), dl=tr.querySelector("datalist")||document.createElement("datalist"); dl.id="dl"+i; det.setAttribute("list",dl.id); det.id="det"+i;
     suggestFor(l.name).forEach(s=>{ const o=document.createElement("option"); o.value=s; dl.appendChild(o); });
     det.value=l.detail||"";
     det.addEventListener("input",()=>{ l.detail=det.value; renderPreview(); });
     const [minus,plus]=tr.querySelectorAll(".qty button"), qi=tr.querySelector(".qty input"), pi=tr.querySelector(".price");
     qi.value=fmtQty(l.qty); pi.value=l.rate%100?(l.rate/100).toFixed(2):l.rate/100;
-    tr.querySelector(".amt").textContent=fmtUI(Math.round(l.qty*l.rate));
+    tr.querySelector(".amt").textContent=l.gift&&l.comp?"FREE":fmtUI(Math.round(l.qty*l.rate));
+    if(l.gift) pi.disabled=true;
     minus.onclick=()=>{ l.qty=Math.max(0,l.qty-1); if(!l.qty) cart.splice(i,1); refresh(); };
     plus.onclick=()=>{ l.qty=l.qty+1; refresh(); };
     qi.onchange=()=>{ l.qty=Math.max(0,parseFloat(qi.value)||0); if(!l.qty) cart.splice(i,1); refresh(); };
@@ -719,11 +787,13 @@ function renderCart(){
 }
 function renderTotals(b){
   const s=db.settings, half=+s.tax/2, t=b.t, rows=[["Items total",fmtUI(t.sub)]];
-  if(t.disc) rows.push(["Discount","−"+fmtUI(t.disc)]);
+  if(t.offer) rows.push(["Saved on offers and gift box",fmtUI(t.offer)]);
+  if(t.disc) rows.push(["Bill discount","−"+fmtUI(t.disc)]);
   if(t.roundOff) rows.push(["Round off",(t.roundOff>0?"+":"−")+fmtUI(Math.abs(t.roundOff))]);
   let html=rows.map(r=>`<span>${r[0]}</span><span>${r[1]}</span>`).join("");
   html+=`<span class="g">Total</span><span class="g">${fmtUI(t.total)}</span>`;
   const gst = b.supply.in ? `CGST ${half}% ${fmtUI(t.cgst)} + SGST ${half}% ${fmtUI(t.sgst)}` : `IGST ${s.tax}% ${fmtUI(t.igst)}`;
+  if(t.saved) html+=`<span class="sub" style="grid-column:1/-1;color:var(--ok);font-weight:600">Customer saves ${fmtUI(t.saved)}</span>`;
   html+=`<span class="sub" style="grid-column:1/-1">Includes ${gst} · taxable value ${fmtUI(t.taxable)}</span>`;
   $("#totals").innerHTML=html;
 }
@@ -733,7 +803,14 @@ function renderPreview(){
   $("#paperCap").textContent=(view==="bill"?"Tax invoice":"Sales record")+" preview · "+b.no;
   return b;
 }
+function giftTag(){ $("#giftPriceTag").textContent=fmtUI(toP(db.settings.giftPrice))+(toP(db.settings.giftFree)>0?" · free over "+fmtUI(toP(db.settings.giftFree)):""); }
 function refresh(){
+  giftTag();
+  applyGiftRule();
+  const anyEl=cart.some(eligible); $("#disc").disabled=$("#discType").disabled=!anyEl&&cart.length>0;
+  $("#discNote").textContent = !cart.length ? "Bill discount applies to regular-price items only." :
+    anyEl ? (cart.some(l=>!eligible(l)) ? "Applies to regular-price items only. Offer items and the gift box keep their price." : "Applies to the whole bill.") :
+    "No bill discount: everything in this sale is already on offer or a gift box.";
   renderCart();
   const b=renderPreview();
   renderTotals(b);
@@ -764,6 +841,11 @@ $("#clearBtn").onclick=()=>{ cart=[]; $("#cName").value=""; $("#cPhone").value="
 $("#adBtn").onclick=()=>{ const n=$("#adName").value.trim(), r=toP($("#adRate").value);
   if(!n){ toast("Enter an item name"); $("#adName").focus(); return; }
   cart.push({name:n,cat:"Other",qty:1,rate:r,detail:""}); $("#adName").value=""; $("#adRate").value=""; refresh(); };
+$("#giftBtn").onclick=()=>{
+  const g=cart.find(l=>l.gift);
+  if(g) g.qty+=1; else cart.push({name:"Gift Box",cat:"Packaging",qty:1,rate:toP(db.settings.giftPrice),gift:true,comp:false,detail:""});
+  refresh(); toast("Gift box added");
+};
 $("#adRate").addEventListener("keydown",e=>{ if(e.key==="Enter") $("#adBtn").click(); });
 $("#itemSearch").addEventListener("input",renderQuick);
 ["#disc","#discType","#cName","#cPhone"].forEach(id=>$(id).addEventListener("input",()=>{ if(id==="#cName"||id==="#cPhone") renderPreview(); else refresh(); }));
@@ -788,9 +870,9 @@ function renderItems(){
     db.items.filter(i=>(i.cat||"Other")===c).forEach(it=>{
       const r=document.createElement("div"); r.className="li";
       r.innerHTML=`<div class="grow nm"></div><span class="amt"></span><button class="btn sm">Edit</button><button class="btn sm ghost danger">Delete</button>`;
-      r.querySelector(".nm").textContent=it.name; r.querySelector(".amt").textContent=fmtUI(it.rate);
+      r.querySelector(".nm").textContent=it.name; r.querySelector(".amt").textContent=fmtUI(it.rate)+(it.mrp>it.rate?"  (MRP "+fmtUI(it.mrp)+")":"");
       const [ed,del]=r.querySelectorAll("button");
-      ed.onclick=()=>{ editingItem=it.id; $("#itName").value=it.name; $("#itCat").value=it.cat||""; $("#itRate").value=it.rate/100;
+      ed.onclick=()=>{ editingItem=it.id; $("#itName").value=it.name; $("#itCat").value=it.cat||""; $("#itRate").value=it.rate/100; $("#itMrp").value=it.mrp?it.mrp/100:"";
         $("#itemFormTitle").textContent="Edit item"; $("#itCancel").hidden=false; $("#itName").focus(); };
       del.onclick=()=>{ if(del.dataset.armed){ db.items=db.items.filter(x=>x.id!==it.id); save(); renderItems(); renderQuick(); }
         else { del.dataset.armed=1; del.textContent="Tap again"; setTimeout(()=>{ del.textContent="Delete"; delete del.dataset.armed; },2500); } };
@@ -798,10 +880,11 @@ function renderItems(){
     });
   });
 }
-function resetItemForm(){ editingItem=null; $("#itName").value=$("#itRate").value=$("#itCat").value=""; $("#itemFormTitle").textContent="Add item"; $("#itCancel").hidden=true; }
+function resetItemForm(){ editingItem=null; $("#itName").value=$("#itRate").value=$("#itCat").value=$("#itMrp").value=""; $("#itemFormTitle").textContent="Add item"; $("#itCancel").hidden=true; }
 $("#itSave").onclick=()=>{
   const name=$("#itName").value.trim(); if(!name){ toast("Enter an item name"); return; }
   const data={name,cat:$("#itCat").value.trim()||"Other",rate:toP($("#itRate").value)};
+  const mrp=toP($("#itMrp").value); data.mrp = mrp>data.rate ? mrp : undefined;
   if(editingItem) Object.assign(db.items.find(x=>x.id===editingItem),data); else db.items.push(Object.assign({id:"i"+Date.now()},data));
   save(); resetItemForm(); renderItems(); renderQuick(); toast("Item saved");
 };
@@ -837,8 +920,8 @@ function renderHistory(){
     box.appendChild(r);
   });
 }
-const COLS=["Event","Invoice No","Line ID","Date","Time","Customer Name","Customer Phone","Item","Category","Detail","Qty","Rate","Line Amount","Line Discount","Line Net","Taxable Value","CGST","SGST","IGST","Place of Supply","Payment Mode","Bill Total","Sent At"];
-function rowsFor(p){ return p.items.map(it=>[p.event,p.invoice_no,it.line_id,p.date,p.time,p.customer_name,p.customer_phone,it.item,it.category,it.detail,it.qty,it.rate,it.line_amount,it.line_discount,it.line_net,it.taxable_value,it.cgst,it.sgst,it.igst,p.place_of_supply,p.payment_mode,p.bill_total,p.sent_at]); }
+const COLS=["Event","Invoice No","Line ID","Date","Time","Customer Name","Customer Phone","Item","Category","Detail","Qty","MRP","Offer Discount","Rate","Line Amount","Line Discount","Line Net","Taxable Value","CGST","SGST","IGST","Place of Supply","Payment Mode","Bill Total","Sent At"];
+function rowsFor(p){ return p.items.map(it=>[p.event,p.invoice_no,it.line_id,p.date,p.time,p.customer_name,p.customer_phone,it.item,it.category,it.detail,it.qty,it.mrp,it.offer_discount,it.rate,it.line_amount,it.line_discount,it.line_net,it.taxable_value,it.cgst,it.sgst,it.igst,p.place_of_supply,p.payment_mode,p.bill_total,p.sent_at]); }
 function csvToday(){
   const esc=v=>{ v=String(v??""); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
   const rows=[COLS]; db.history.filter(isToday).slice().reverse().forEach(b=>rowsFor(payload(b,b.cancelled?"Cancelled":"Sale")).forEach(r=>rows.push(r)));
@@ -863,8 +946,8 @@ $("#daySumBtn").onclick=async()=>{
 
 /* ---------- Settings ---------- */
 const map={sShop:"shop",sAddr:"addr",sPhone:"phone",sGst:"gst",sHsn:"hsn",sTax:"tax",sFooter:"footer",sSign:"sign",sPrefix:"prefix",sPad:"pad",
-  sHook:"hook",sUpi:"upi",sQr:"qr",sWidth:"width",sFeed:"feed",sChunk:"chunk",sCut:"cut",sBigTotal:"bigTotal"};
-const nums=["tax","pad","width","feed","chunk"];
+  sHook:"hook",sGiftPrice:"giftPrice",sGiftFree:"giftFree",sUpi:"upi",sQr:"qr",sWidth:"width",sFeed:"feed",sChunk:"chunk",sCut:"cut",sBigTotal:"bigTotal"};
+const nums=["tax","pad","width","feed","chunk","giftPrice","giftFree"];
 function loadSettings(){ for(const [id,k] of Object.entries(map)){ const el=$("#"+id); if(el.type==="checkbox") el.checked=!!db.settings[k]; else el.value=db.settings[k]; }
   $("#homeBtn").textContent=stateName(homeCode()); $("#supplySeg").querySelector('[data-v="out"]').textContent="Outside "+stateName(homeCode()); }
 for(const [id,k] of Object.entries(map)) $("#"+id).addEventListener("input",e=>{
@@ -874,8 +957,10 @@ for(const [id,k] of Object.entries(map)) $("#"+id).addEventListener("input",e=>{
 $("#testHookBtn").onclick=()=>{
   if(!(db.settings.hook||"").trim()){ toast("Add the webhook URL first"); return; }
   const now=new Date(), st=stamp(now);
-  const lines=[{name:"Round Earrings",cat:"Earrings",qty:1,rate:459000,detail:"Stone: Garnet"},{name:"Threader (pair)",cat:"Studs",qty:1,rate:120000,detail:""}];
-  const c=calc(lines,100,"amt",true);
+  const lines=[{name:"Round Earrings",cat:"Earrings",qty:1,rate:399000,mrp:459000,detail:"Stone: Garnet"},
+    {name:"Felicity Ring",cat:"Rings",qty:1,rate:549000,detail:"Size 12"},
+    {name:"Gift Box",cat:"Packaging",qty:1,rate:20000,gift:true,comp:true,detail:""}];
+  const c=calc(lines,10,"pct",true);
   const b={no:"TEST-0001",date:st.date,time:st.time,ts:now.getTime(),cust:{name:"Test Customer",phone:"9999999999"},supply:{in:true,code:homeCode()},pay:"UPI",lines,alloc:c.lines,t:c.t};
   queue(payload(b,"Test")); toast("Test sale sent. Check Make and your sheet.");
 };
@@ -906,6 +991,7 @@ $("#connectBtn").onclick=()=>{ if(chr&&dev&&dev.gatt.connected){ dev.gatt.discon
 let tt; function toast(m){ const t=$("#toast"); t.textContent=m; t.hidden=false; clearTimeout(tt); tt=setTimeout(()=>t.hidden=true,3500); }
 
 if(!db.settings.fy) { db.settings.fy=fyTok(new Date()); save(); }
+if(catalogReset){ save(); setTimeout(()=>toast("New price list loaded. Sales history cleared."),400); }
 loadSettings(); renderQuick(); renderItems(); renderHistory(); refresh(); syncUI(); flush();
 if(!navigator.bluetooth) setP("off","Bluetooth unavailable");
 })();
