@@ -429,6 +429,7 @@ try { db = JSON.parse(localStorage.getItem(KEY)) || null; } catch(e){ db = null;
 if(!db) db = JSON.parse(JSON.stringify(defaults));
 db.settings = Object.assign({}, defaults.settings, db.settings);
 db.details = db.details || {}; db.outbox = db.outbox || []; db.history = db.history || [];
+db.outbox = db.outbox.flatMap(o=>Array.isArray(o.items)?flatRows(o):[o]);
 let catalogReset = false;
 if(db.catalog !== CATALOG){
   // New price list: replace items, wipe sales history and unsent sync, restart the exhibition series
@@ -680,7 +681,19 @@ function payload(b, event){
   };
 }
 let flushing=false, lastSyncErr="";
-function queue(p){ db.outbox.push(p); save(); syncUI(); flush(); }
+/* One webhook request per item: every field is flat, so Make maps it straight into a sheet row (no Iterator). */
+function flatRows(p){
+  return p.items.map(it=>({
+    event:p.event, invoice_no:p.invoice_no, line_id:it.line_id, line_no:it.line_no, lines_in_bill:p.items.length,
+    date:p.date, time:p.time, customer_name:p.customer_name, customer_phone:p.customer_phone,
+    item:it.item, category:it.category, detail:it.detail, qty:it.qty, mrp:it.mrp, offer_discount:it.offer_discount,
+    rate:it.rate, complimentary:it.complimentary?"Yes":"No", line_amount:it.line_amount, line_discount:it.line_discount,
+    line_net:it.line_net, taxable_value:it.taxable_value, cgst:it.cgst, sgst:it.sgst, igst:it.igst,
+    place_of_supply:p.place_of_supply, supply_type:p.supply_type, payment_mode:p.payment_mode,
+    bill_total:p.bill_total, timestamp:p.timestamp, sent_at:""
+  }));
+}
+function queue(p){ flatRows(p).forEach(r=>db.outbox.push(r)); save(); syncUI(); flush(); }
 async function flush(){
   const url=(db.settings.hook||"").trim();
   if(flushing||!url||!db.outbox.length){ syncUI(); return; }
@@ -705,7 +718,7 @@ function syncUI(){
   else if(n){ dot.className="dot "+(lastSyncErr?"err":"busy"); name.textContent=n+" waiting"; }
   else { dot.className="dot on"; name.textContent="Synced"; }
   $("#syncNote").textContent = !hook ? "Add a webhook URL to copy every sale to your Google Sheet." :
-    n ? `${n} update${n>1?"s":""} waiting to send. ${lastSyncErr}` : "All sales are sent. New sales send automatically.";
+    n ? `${n} row${n>1?"s":""} waiting to send. ${lastSyncErr}` : "All sales are sent. New sales send automatically.";
 }
 setInterval(()=>{ if(db.outbox.length) flush(); },60000);
 window.addEventListener("online",flush);
