@@ -6,17 +6,15 @@
 <meta name="theme-color" content="#2f3a56">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Suramyah Till</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Cormorant+Garamond:wght@600&family=JetBrains+Mono:wght@400;700&display=swap">
 <style>
 /* Layout: app bar + tabs; Bill tab = sale form column + thermal paper preview column; phone gets a fixed action bar */
 :root{
   --bg:#f2f3f6; --surface:#ffffff; --line:#dcdfe7; --ink:#1b1f2a; --muted:#5f6678;
   --accent:#34416a; --accent-ink:#ffffff; --accent-soft:#e6e9f3;
   --paper:#fbfbf8; --paper-ink:#222; --danger:#b3412f; --ok:#2e7d4f; --warn:#a86b12;
-  --ui:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --brand:"Cormorant Garamond", Georgia, serif;
-  --mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --ui:system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --brand:"Didot", "Bodoni 72", ui-serif, Georgia, serif;
+  --mono:ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --r:10px;
   color-scheme:light;
 }
@@ -370,6 +368,10 @@ input[type=checkbox]{width:auto}
         <label class="check" style="margin-top:8px"><input type="checkbox" id="sQr"> Print QR on tax invoices paid by UPI</label>
       </div>
       <div class="panel">
+        <h2>Offline use</h2>
+        <p class="note" id="offlineNote" style="margin:0">Checking…</p>
+      </div>
+      <div class="panel">
         <h2>Backup</h2>
         <div class="actions" style="margin-top:0">
           <button class="btn" id="exportBtn">Copy backup</button>
@@ -399,7 +401,7 @@ const STATES = [["01","Jammu and Kashmir"],["02","Himachal Pradesh"],["03","Punj
 const stateName = c => (STATES.find(s=>s[0]===c)||[c,"State "+c])[1];
 
 const I = (cat,name,rs,mrp) => Object.assign({id:"i"+Math.random().toString(36).slice(2,9),cat,name,rate:rs*100}, mrp?{mrp:mrp*100}:{});
-const CATALOG = 2;
+const CATALOG = 3;
 const defaults = {
   catalog:CATALOG,
   settings:{
@@ -420,7 +422,8 @@ const defaults = {
     I("Rings","Bar Ring",2490), I("Rings","Hammered Ring",4490), I("Rings","Mois Unity Ring",5490), I("Rings","Mois Enchanted Ring",5990),
     I("Studs","Studs",3990), I("Studs","Heart Studs",3990), I("Studs","Studs with Threader",4990),
     I("Studs","Threader (1 pc)",700), I("Studs","Threader (pair)",1400),
-    I("Studs","Mois Round Studs",4990), I("Studs","Mois Heart Studs",4990)
+    I("Studs","Mois Round Studs",4990), I("Studs","Mois Heart Studs",4990),
+    I("Nosepins","Nosepin",1499)
   ],
   history:[], details:{}, outbox:[]
 };
@@ -430,12 +433,18 @@ if(!db) db = JSON.parse(JSON.stringify(defaults));
 db.settings = Object.assign({}, defaults.settings, db.settings);
 db.details = db.details || {}; db.outbox = db.outbox || []; db.history = db.history || [];
 db.outbox = db.outbox.flatMap(o=>Array.isArray(o.items)?flatRows(o):[o]);
-let catalogReset = false;
-if(db.catalog !== CATALOG){
-  // New price list: replace items, wipe sales history and unsent sync, restart the exhibition series
+let catalogMsg = "";
+if((db.catalog||0) < 2){
+  // v2 price list: replace items, wipe sales history and unsent sync, restart the exhibition series
   db.items = JSON.parse(JSON.stringify(defaults.items)); db.history = []; db.outbox = [];
-  db.settings.next = 1; db.settings.fy = ""; db.catalog = CATALOG; catalogReset = true;
+  db.settings.next = 1; db.settings.fy = ""; catalogMsg = "New price list loaded. Sales history cleared.";
 }
+if(db.catalog < 3 && catalogMsg===""){
+  // v3: add Nosepin, keep everything else
+  if(!db.items.some(i=>i.name==="Nosepin")) db.items.push(defaults.items.find(i=>i.name==="Nosepin"));
+  catalogMsg = "Nosepin added to your items.";
+}
+db.catalog = CATALOG;
 const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){} };
 
 /* sale state */
@@ -1004,7 +1013,14 @@ $("#connectBtn").onclick=()=>{ if(chr&&dev&&dev.gatt.connected){ dev.gatt.discon
 let tt; function toast(m){ const t=$("#toast"); t.textContent=m; t.hidden=false; clearTimeout(tt); tt=setTimeout(()=>t.hidden=true,3500); }
 
 if(!db.settings.fy) { db.settings.fy=fyTok(new Date()); save(); }
-if(catalogReset){ save(); setTimeout(()=>toast("New price list loaded. Sales history cleared."),400); }
+if(catalogMsg){ save(); setTimeout(()=>toast(catalogMsg),400); }
+/* offline: keep a copy of the app on the phone so it opens without internet */
+function offlineUI(state){ const el=$("#offlineNote"); if(el) el.textContent=state; }
+if("serviceWorker" in navigator && window.isSecureContext){
+  navigator.serviceWorker.register("sw.js").then(r=>{
+    offlineUI(navigator.serviceWorker.controller ? "Ready. This app opens even with no internet." : "Saving a copy for offline use. Reopen the app once to finish.");
+  }).catch(e=>offlineUI("Offline copy not available in this browser ("+e.message+"). Keep the app tab open during the exhibition."));
+} else offlineUI("This browser can't keep an offline copy. Keep the app tab open during the exhibition.");
 loadSettings(); renderQuick(); renderItems(); renderHistory(); refresh(); syncUI(); flush();
 if(!navigator.bluetooth) setP("off","Bluetooth unavailable");
 })();
